@@ -2,129 +2,116 @@ const router = require('express').Router()
 const nodemailer = require('nodemailer')
 const User = require('../models/users')
 const bcrypt = require('bcrypt')
-const { generateKeyPair } = require('crypto');
+const redis = require('redis')
+const jwt = require('jsonwebtoken')
+const { promisify } = require('util')
+const { generateKeyPair } = require('crypto')
 require('dotenv').config()
 
-let transporter = nodemailer.createTransport({
-    host: "smtp.google.com",
-    port: 465,
-    secure: true,
-    service: 'Gmail',
-
-    auth: {
-        user: process.env.EMAIL,
-        pass: process.env.PASSWORD
-    }
+const client = redis.createClient(process.env.REDIS_URL)
+client.on('connect', () => {
+  console.log('Redis Client Connected')
+})
+client.on('error', (err) => {
+  console.log('Something went wrong ' + err)
 })
 
-let OTP
-let EMAIL = {
-    verified: false,
-    email: ""
-}
+const redisSet = promisify(client.set).bind(client)
+const redisGet = promisify(client.get).bind(client)
 
-router.route('/verify').post((req, res) => {
-    try {
-        console.log(req.body.otp);
+const transporter = nodemailer.createTransport({
+  host: 'smtp.google.com',
+  port: 465,
+  secure: true,
+  service: 'Gmail',
 
-        if (OTP === parseInt(req.body.otp)) {
-            EMAIL.verified = true
-            res.send(EMAIL)
-        }
-        else{
-            throw new Error("Wrong OTP")
-        }
-    }
-    catch (error) {
-        console.log(err);
-        res.status(500).send(err.message)
-    }
+  auth: {
+    user: process.env.EMAIL,
+    pass: process.env.PASSWORD
+  }
 })
 
-router.route('/register').post((req, res) =>{
-    try{
-        if(EMAIL.verified === true){
-            generateKeyPair('rsa', {
-                modulusLength: 4096,
-                namedCurve: 'secp256k1',   // Options 
-                publicKeyEncoding: {
-                    type: 'spki',
-                    format: 'der'
-                },
-                privateKeyEncoding: {
-                    type: 'pkcs8',
-                    format: 'der',
-                }
-            },
-                async (err, publicKey, privateKey) => { // Callback function 
-                    if (!err) {
-                        const hash = await bcrypt.hash(req.body.password, 10)
-                        const newUser = new User({
-                            name: req.body.name,
-                            email: EMAIL.email,
-                            password: hash,
-                            publicKey: publicKey
-                        })
-                        await newUser.save()
-    
-                        console.log("Public Key is: ",
-                            publicKey.toString('hex'));
-                            console.log();
-                        console.log("Private Key is: ",
-                            privateKey.toString('hex'));
-    
-                        res.json({
-                            "User": newUser,
-                            "Public Key": publicKey.toString('hex'),
-                            "Private Key": privateKey.toString('hex')
-                        })
-                    }
-                    else {
-                        throw err
-                    }
-    
-                });
-        }
-        else{
-            throw new Error("Email not verified")
-        }
+router.route('/verify').post(async (req, res) => {
+  try {
+    const { otp, email } = req.body
+    const OTP = await redisGet(email)
+    if (OTP.toString() === otp.toString()) {
+      await redisSet(email, 'True')
+      res.send(email)
+    } else {
+      res.status(401).json({ error: true, message: 'WRONG OTP' })
     }
-    catch(error){
-        console.log(error);
-        res.status(400).send(eror.message)
+  } catch (error) {
+    console.log(error)
+    res.status(500).send(error.message)
+  }
+})
+
+router.route('/register').post(async (req, res) => {
+  try {
+    const { email, name, password } = req.body
+    const EMAIL = await redisGet(email)
+    if (EMAIL === 'True') {
+      generateKeyPair('rsa', {
+        modulusLength: 4096,
+        namedCurve: 'secp256k1', // Options
+        publicKeyEncoding: {
+          type: 'spki',
+          format: 'der'
+        },
+        privateKeyEncoding: {
+          type: 'pkcs8',
+          format: 'der'
+        }
+      },
+      async (err, publicKey, privateKey) => { // Callback function
+        if (!err) {
+          const hash = await bcrypt.hash(password, 10)
+          const newUser = new User({
+            name: name,
+            email: email,
+            password: hash,
+            publicKey: publicKey.toString('hex')
+          })
+          await newUser.save()
+          const token = jwt.sign({ _id: newUser._id }, process.env.TOKEN_SECRET)
+          res.json({
+            Token: token,
+            User: newUser,
+            'Public Key': publicKey.toString('hex'),
+            'Private Key': privateKey.toString('hex')
+          })
+        } else {
+          res.status(500).json(err)
+        }
+      })
+    } else {
+      res.status(401).json({ error: true, message: 'EMAIL NOT VERIFIED' })
     }
+  } catch (error) {
+    console.log(error)
+    res.status(400).json(error)
+  }
 })
 
 router.route('/send').post(async (req, res) => {
-    try {
-        var otp = Math.random();
-        otp = otp * 1000000;
-        otp = parseInt(otp);
-
-        EMAIL.email = req.body.email
-
-        var mailOptions = {
-            to: req.body.email,
-            subject: "Otp for registration",
-            html: "<h3>OTP for account verification is </h3>" + "<h1 style='font-weight:bold;'>" + otp + "</h1>" // html body
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            try {
-                console.log('Message sent: %s', info.messageId);
-                OTP = otp
-                res.send("Email Sent")
-            }
-            catch (error) {
-                console.log(err);
-                res.status(500).send(err.message)
-            }
-        })
+  try {
+    const { email } = req.body
+    const minim = 10000
+    const maxim = 99999
+    const otp = Math.floor(Math.random() * (maxim - minim + 1)) + minim
+    const mailOptions = {
+      to: email,
+      subject: 'Otp for registration',
+      html: '<h3>OTP for account verification is </h3>' + '<h1 style=\'font-weight:bold;\'>' + otp + '</h1>' // html body
     }
-    catch (err) {
-        console.log(err);
-        res.status(500).send(err.message)
-    }
+    await transporter.sendMail(mailOptions)
+    await redisSet(email, otp)
+    res.send('Email Sent')
+  } catch (err) {
+    console.log(err)
+    res.status(500).send(err.message)
+  }
 })
 
 module.exports = router

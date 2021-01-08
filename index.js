@@ -1,33 +1,30 @@
 const express = require('express')
 const cors = require('cors')
-const bodyParser = require('body-parser')
 const mongoose = require('mongoose')
-
+require('dotenv').config()
 const UserRouter = require('./routes/users')
 
-const hostname = "localhost"
-const port = 3000
-const url = "mongodb://127.0.0.1/B2BDB";
+const hostname = 'localhost'
+const port = process.env.PORT || 3000
+const url = process.env.DATABASE_URL
 
 const app = express()
 app.use(cors())
-app.use(bodyParser.urlencoded({extended: false}))
-app.use(bodyParser.json())
+app.use(express.urlencoded({ extended: false }))
+app.use(express.json())
 
 mongoose.connect(url, {
-    useNewUrlParser: true,
-    useCreateIndex: true,
-    useUnifiedTopology: true
-});
-
-const connection = mongoose.connection;
-
-connection.once('open', ()=>{
-    console.log("Successfully connected to database");
-});
+  useNewUrlParser: true,
+  useCreateIndex: true,
+  useUnifiedTopology: true
+}).then(() => {
+  console.log('Connected to Database')
+}).catch((err) => {
+  console.log(err.toString())
+})
 
 app.use('/api/users', UserRouter)
 
-app.listen(port, hostname, () =>{
-    console.log(`Server up and running on https://${hostname}:${port}`);
+app.listen(port, hostname, () => {
+  console.log(`Server up and running on https://${hostname}:${port}`)
 })
