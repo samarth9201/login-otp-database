@@ -37,7 +37,7 @@ router.route('/verify').post(async (req, res) => {
     const OTP = await redisGet(email)
     if (OTP.toString() === otp.toString()) {
       await redisSet(email, 'True')
-      res.send(email)
+      res.json({ error: false, message: 'EMAIL VERIFIED SUCCESSFULLY' })
     } else {
       res.status(401).json({ error: true, message: 'WRONG OTP' })
     }
@@ -51,6 +51,10 @@ router.route('/register').post(async (req, res) => {
   try {
     const { email, name, password } = req.body
     const EMAIL = await redisGet(email)
+    const exists = await User.findOne({ email: email })
+    if (exists) {
+      return res.status(409).json({ error: true, message: 'User Already Exists' })
+    }
     if (EMAIL === 'True') {
       generateKeyPair('rsa', {
         modulusLength: 4096,
@@ -107,7 +111,7 @@ router.route('/send').post(async (req, res) => {
     }
     await transporter.sendMail(mailOptions)
     await redisSet(email, otp)
-    res.send('Email Sent')
+    res.json({ error: false, message: 'Email Sent' })
   } catch (err) {
     console.log(err)
     res.status(500).send(err.message)
