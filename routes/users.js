@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt')
 const redis = require('redis')
 const jwt = require('jsonwebtoken')
 const { promisify } = require('util')
-const { generateKeyPair } = require('crypto')
+const { generateKeyPairSync } = require('crypto')
 require('dotenv').config()
 
 const client = redis.createClient(process.env.REDIS_URL)
@@ -56,7 +56,7 @@ router.route('/register').post(async (req, res) => {
       return res.status(409).json({ error: true, message: 'User Already Exists' })
     }
     if (EMAIL === 'True') {
-      generateKeyPair('rsa', {
+      const { publicKey, privateKey } = generateKeyPairSync('rsa', {
         modulusLength: 4096,
         namedCurve: 'secp256k1', // Options
         publicKeyEncoding: {
@@ -67,27 +67,21 @@ router.route('/register').post(async (req, res) => {
           type: 'pkcs8',
           format: 'der'
         }
-      },
-      async (err, publicKey, privateKey) => { // Callback function
-        if (!err) {
-          const hash = await bcrypt.hash(password, 10)
-          const newUser = new User({
-            name: name,
-            email: email,
-            password: hash,
-            publicKey: publicKey.toString('hex')
-          })
-          await newUser.save()
-          const token = jwt.sign({ _id: newUser._id }, process.env.TOKEN_SECRET)
-          res.json({
-            Token: token,
-            User: newUser,
-            'Public Key': publicKey.toString('hex'),
-            'Private Key': privateKey.toString('hex')
-          })
-        } else {
-          res.status(500).json(err)
-        }
+      })
+      const hash = await bcrypt.hash(password, 10)
+      const newUser = new User({
+        name: name,
+        email: email,
+        password: hash,
+        publicKey: publicKey.toString('hex')
+      })
+      await newUser.save()
+      const token = jwt.sign({ _id: newUser._id }, process.env.TOKEN_SECRET)
+      res.json({
+        Token: token,
+        User: newUser,
+        'Public Key': publicKey.toString('hex'),
+        'Private Key': privateKey.toString('hex')
       })
     } else {
       res.status(401).json({ error: true, message: 'EMAIL NOT VERIFIED' })
