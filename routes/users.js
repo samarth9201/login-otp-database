@@ -4,6 +4,7 @@ const User = require('../models/users')
 const bcrypt = require('bcrypt')
 const redis = require('redis')
 const jwt = require('jsonwebtoken')
+const eccrypto = require('eccrypto')
 const { promisify } = require('util')
 const { generateKeyPairSync } = require('crypto')
 require('dotenv').config()
@@ -57,18 +58,10 @@ router.route('/register').post(async (req, res) => {
       return res.status(409).json({ error: true, message: 'User Already Exists' })
     }
     if (EMAIL === 'True') {
-      const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-        modulusLength: 4096,
-        namedCurve: 'secp256k1', // Options
-        publicKeyEncoding: {
-          type: 'spki',
-          format: 'der'
-        },
-        privateKeyEncoding: {
-          type: 'pkcs8',
-          format: 'der'
-        }
-      })
+
+      const privateKey = eccrypto.generatePrivate()
+      const publicKey = eccrypto.getPublic(privateKey)
+
       const hash = await bcrypt.hash(password, 10)
       const newUser = new User({
         name: name,
@@ -115,14 +108,17 @@ router.route('/send').post(async (req, res) => {
 
 router.route('/login').post(async (req, res) => {
   try {
-    const {email, password } = req.body
+    const {email, password, privateKey } = req.body
     const user = await User.findOne({ email: email })
     bcrypt.compare(password, user.password, (err, result) =>{
       if(err){
         res.status(400).send(err);
       }
-
       if(result === true){
+        const publicKey = eccrypto.getPublic(Buffer.from(privateKey, 'hex'))
+        if(publicKey.toString('hex') != user.publicKey){
+          throw new Error("Invalid Private Key")
+        }
         const token = jwt.sign(
           {
             email: user.email,
