@@ -52,6 +52,7 @@ router.route('/register').post(async (req, res) => {
     const { email, name, password } = req.body
     const EMAIL = await redisGet(email)
     const exists = await User.findOne({ email: email })
+    console.log(exists);
     if (exists) {
       return res.status(409).json({ error: true, message: 'User Already Exists' })
     }
@@ -107,6 +108,37 @@ router.route('/send').post(async (req, res) => {
     await redisSet(email, otp)
     res.json({ error: false, message: 'Email Sent' })
   } catch (err) {
+    console.log(err)
+    res.status(500).send(err.message)
+  }
+})
+
+router.route('/login').post(async (req, res) => {
+  try {
+    const {email, password } = req.body
+    const user = await User.findOne({ email: email })
+    bcrypt.compare(password, user.password, (err, result) =>{
+      if(err){
+        res.status(400).send(err);
+      }
+
+      if(result === true){
+        const token = jwt.sign(
+          {
+            email: user.email,
+            publicKey: user.publicKey
+          },
+          process.env.TOKEN_SECRET
+        )
+
+        res.status(200).json({
+          error: false,
+          token: token
+        })
+      }
+    })
+  }
+  catch (error) {
     console.log(err)
     res.status(500).send(err.message)
   }
