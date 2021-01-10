@@ -6,7 +6,6 @@ const redis = require('redis')
 const jwt = require('jsonwebtoken')
 const eccrypto = require('eccrypto')
 const { promisify } = require('util')
-const { generateKeyPairSync } = require('crypto')
 require('dotenv').config()
 
 const client = redis.createClient(process.env.REDIS_URL)
@@ -53,12 +52,11 @@ router.route('/register').post(async (req, res) => {
     const { email, name, password } = req.body
     const EMAIL = await redisGet(email)
     const exists = await User.findOne({ email: email })
-    console.log(exists);
+    console.log(exists)
     if (exists) {
       return res.status(409).json({ error: true, message: 'User Already Exists' })
     }
     if (EMAIL === 'True') {
-
       const privateKey = eccrypto.generatePrivate()
       const publicKey = eccrypto.getPublic(privateKey)
 
@@ -108,22 +106,19 @@ router.route('/send').post(async (req, res) => {
 
 router.route('/login').post(async (req, res) => {
   try {
-    const {email, password, privateKey } = req.body
+    const { email, password, privateKey } = req.body
     const user = await User.findOne({ email: email })
-    bcrypt.compare(password, user.password, (err, result) =>{
-      if(err){
-        res.status(400).send(err);
+    bcrypt.compare(password, user.password, (err, result) => {
+      if (err) {
+        res.status(400).send(err)
       }
-      if(result === true){
+      if (result === true) {
         const publicKey = eccrypto.getPublic(Buffer.from(privateKey, 'hex'))
-        if(publicKey.toString('hex') != user.publicKey){
-          throw new Error("Invalid Private Key")
+        if (publicKey.toString('hex') !== user.publicKey) {
+          throw new Error('Invalid Private Key')
         }
         const token = jwt.sign(
-          {
-            email: user.email,
-            publicKey: user.publicKey
-          },
+          { _id: user._id },
           process.env.TOKEN_SECRET
         )
 
@@ -133,10 +128,9 @@ router.route('/login').post(async (req, res) => {
         })
       }
     })
-  }
-  catch (error) {
-    console.log(err)
-    res.status(500).send(err.message)
+  } catch (error) {
+    console.log(error)
+    res.status(500).send(error.message)
   }
 })
 
