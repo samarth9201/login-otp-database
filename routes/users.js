@@ -6,14 +6,15 @@ const redis = require('redis')
 const jwt = require('jsonwebtoken')
 const eccrypto = require('eccrypto')
 const { promisify } = require('util')
+const logger = require('../logging/logger')
 require('dotenv').config()
 
 const client = redis.createClient(process.env.REDIS_URL)
 client.on('connect', () => {
-  console.log('Redis Client Connected')
+  logger.info('Redis Client Connected')
 })
 client.on('error', (err) => {
-  console.log('Something went wrong ' + err)
+  logger.error('Something went wrong ' + err)
 })
 
 const redisSet = promisify(client.set).bind(client)
@@ -42,17 +43,16 @@ router.route('/verify').post(async (req, res) => {
       res.status(401).json({ error: true, message: 'WRONG OTP' })
     }
   } catch (error) {
-    console.log(error)
+    logger.error(error.message)
     res.status(500).send(error.message)
   }
 })
 
 router.route('/register').post(async (req, res) => {
   try {
-    const { email, name, password } = req.body
+    const { email, password } = req.body
     const EMAIL = await redisGet(email)
     const exists = await User.findOne({ email: email })
-    console.log(exists)
     if (exists) {
       return res.status(409).json({ error: true, message: 'User Already Exists' })
     }
@@ -62,7 +62,6 @@ router.route('/register').post(async (req, res) => {
 
       const hash = await bcrypt.hash(password, 10)
       const newUser = new User({
-        name: name,
         email: email,
         password: hash,
         publicKey: publicKey.toString('hex')
@@ -79,7 +78,7 @@ router.route('/register').post(async (req, res) => {
       res.status(401).json({ error: true, message: 'EMAIL NOT VERIFIED' })
     }
   } catch (error) {
-    console.log(error)
+    logger.error(error.message)
     res.status(400).json(error)
   }
 })
@@ -99,7 +98,7 @@ router.route('/send').post(async (req, res) => {
     await redisSet(email, otp)
     res.json({ error: false, message: 'Email Sent' })
   } catch (err) {
-    console.log(err)
+    logger.error(err)
     res.status(500).send(err.message)
   }
 })
@@ -129,7 +128,7 @@ router.route('/login').post(async (req, res) => {
       }
     })
   } catch (error) {
-    console.log(error)
+    logger.error(error)
     res.status(500).send(error.message)
   }
 })
