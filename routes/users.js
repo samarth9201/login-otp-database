@@ -38,9 +38,9 @@ router.route('/verify').post(async (req, res) => {
     const OTP = await redisGet(email)
     if (OTP.toString() === otp.toString()) {
       await redisSet(email, 'True')
-      res.json({ error: false, message: 'EMAIL VERIFIED SUCCESSFULLY' })
+      res.json({ error: false, message: 'EMAIL VERIFIED SUCCESSFULLY' ,code:'200' })
     } else {
-      res.status(401).json({ error: true, message: 'WRONG OTP' })
+      res.status(401).json({ error: true, message: 'WRONG OTP' ,code:'401'})
     }
   } catch (error) {
     logger.error(error.message)
@@ -71,8 +71,9 @@ router.route('/register').post(async (req, res) => {
       res.json({
         Token: token,
         User: newUser,
+        code:200,
         'Public Key': publicKey.toString('hex'),
-        'Private Key': privateKey.toString('hex')
+        pvtKey: privateKey.toString('hex')
       })
     } else {
       res.status(401).json({ error: true, message: 'EMAIL NOT VERIFIED' })
@@ -96,7 +97,7 @@ router.route('/send').post(async (req, res) => {
     }
     await transporter.sendMail(mailOptions)
     await redisSet(email, otp)
-    res.json({ error: false, message: 'Email Sent' })
+    res.json({ error: false, message: 'Email Sent' ,code:'200'})
   } catch (err) {
     logger.error(err)
     res.status(500).send(err.message)
@@ -123,11 +124,13 @@ router.route('/login').post(async (req, res) => {
 
         res.status(200).json({
           error: false,
-          token: token
+          token: token,
+          code:200
         })
       }
     })
   } catch (error) {
+    console.log("Invalid pvt key");
     logger.error(error)
     res.status(500).send(error.message)
   }
