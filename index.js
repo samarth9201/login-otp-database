@@ -5,6 +5,7 @@ const morgan = require('./logging/morgan')
 const logger = require('./logging/logger')
 require('dotenv').config()
 const UserRouter = require('./routes/users')
+const FabricRouter = require('./routes/fabric')
 
 const hostname = 'localhost'
 const port = process.env.PORT || 3000
@@ -27,6 +28,7 @@ mongoose.connect(url, {
 })
 
 app.use('/api/users', UserRouter)
+app.use('/api/users/fabric', FabricRouter)
 
 app.listen(port, hostname, () => {
   logger.info(`Server up and running on https://${hostname}:${port}`)
